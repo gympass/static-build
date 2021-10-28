@@ -1,0 +1,47 @@
+name: 'Static Build'
+description: 'Builds Static Websites'
+branding:
+  icon: 'cloud'
+  color: 'gray-dark'
+inputs:
+  entrypoint:
+    description: 'static-website-builder binary entrypoint'
+    required: false
+    default: '/gympass/static-website-builder'
+  confirm:
+    description: 'whether the action should request confirmation before continuing'
+    required: false
+    default: false
+  env:
+    description: 'Environment name to build'
+    required: true
+  deploy-to:
+    description: 'Target environment to deploy to'
+    required: true
+  load-envs-from:
+    description: 'Filename to load containing environment variables'
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: "Build image"
+      shell: bash
+      run: |
+        set -eux
+        cmd=("${{ inputs.entrypoint }}" --env ${{ inputs.env }});
+        if [ -n '${{ inputs.load-envs-from }}' ]; then cmd+=(--load-envs-from ${{ inputs.load-envs-from }}); fi
+        "${cmd[@]}";
+
+        if [[ '${{ inputs.confirm }}' == 'true' ]]; then
+          /gympass/confirm --github-token ${{ github.token }};
+        fi
+
+        set +a
+        source /tmp/static-build-envs
+        set -a
+
+        /gympass/cloudfront-deploy --environment '${{ inputs.deploy-to }}' \
+                                   --bucket-name "$BUCKET_NAME" \
+                                   --cloudfront-id "$CLOUDFRONT_ID" \
+                                   --source 'build/'
+        rm -rf build/
