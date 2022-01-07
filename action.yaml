@@ -21,10 +21,19 @@ inputs:
   load-envs-from:
     description: 'Filename to load containing environment variables'
     required: false
+  preserve-build-directory:
+    description: 'Retains the build directory; otherwise, the build directory is removed after the deploy is complete'
+    required: false
+    default: false
+outputs:
+  deployed-to-production:
+    description: "Whether the action deployed changes to production. Possible values are 'true' and 'false'"
+    value: ${{ steps.build.outputs.TO_PRODUCTION }}
 runs:
   using: "composite"
   steps:
     - name: "Build image"
+      id: build
       shell: bash
       run: |
         set -eux
@@ -34,6 +43,7 @@ runs:
 
         if [[ '${{ inputs.confirm }}' == 'true' ]]; then
           if ! /gympass/confirm --github-token "${{ github.token }}" --exit-code; then
+            echo '::set-output name=TO_PRODUCTION::false'
             echo "Aborted.";
             exit 0;
           fi
@@ -47,4 +57,9 @@ runs:
                                    --bucket-name "$BUCKET_NAME" \
                                    --cloudfront-id "$CLOUDFRONT_ID" \
                                    --source 'build/'
-        rm -rf build/
+
+        if [[ '${{ inputs.preserve-build-directory }}' == 'false' ]]; then
+          rm -rf build/
+        fi
+
+        echo '::set-output name=TO_PRODUCTION::true'
