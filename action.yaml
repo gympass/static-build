@@ -33,7 +33,10 @@ runs:
         "${cmd[@]}";
 
         if [[ '${{ inputs.confirm }}' == 'true' ]]; then
-          /gympass/confirm --github-token ${{ github.token }};
+          if ! /gympass/confirm --github-token "${{ github.token }}" --exit-code; then
+            echo "Aborted.";
+            exit 0;
+          fi
         fi
 
         set +a
