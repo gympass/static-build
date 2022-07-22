@@ -25,6 +25,9 @@ inputs:
     description: 'Retains the build directory; otherwise, the build directory is removed after the deploy is complete'
     required: false
     default: false
+  working-directory:
+    description: 'Alternative working directory to run this action from'
+    required: false
 outputs:
   deployed-to-production:
     description: "Whether the action deployed changes to production. Possible values are 'true' and 'false'"
@@ -38,7 +41,8 @@ runs:
       run: |
         set -eux
         cmd=("${{ inputs.entrypoint }}" --env ${{ inputs.env }});
-        if [ -n '${{ inputs.load-envs-from }}' ]; then cmd+=(--load-envs-from ${{ inputs.load-envs-from }}); fi
+        if [ -n '${{ inputs.load-envs-from }}' ]; then cmd+=(--load-envs-from '${{ inputs.load-envs-from }}'); fi
+        if [ -n '${{ inputs.working-directory }}' ]; then cmd+=(--working-directory '${{ inputs.working-directory }}'); fi
         "${cmd[@]}";
 
         if [[ '${{ inputs.confirm }}' == 'true' ]]; then
@@ -53,13 +57,20 @@ runs:
         source /tmp/static-build-envs
         set -a
 
-        /gympass/cloudfront-deploy --environment '${{ inputs.deploy-to }}' \
-                                   --bucket-name "$BUCKET_NAME" \
-                                   --cloudfront-id "$CLOUDFRONT_ID" \
-                                   --source 'build/'
+        deploy=('/gympass/cloudfront-deploy'
+                '--environment' '${{ inputs.deploy-to }}'
+                '--bucket-name' "$BUCKET_NAME"
+                '--cloudfront-id' "$CLOUDFRONT_ID"
+                '--source' 'build/')
+        if [ -n '${{ inputs.working-directory }}' ]; then deploy+=(--working-directory ${{ inputs.working-directory }}); fi
+        "${deploy[@]}"
 
         if [[ '${{ inputs.preserve-build-directory }}' == 'false' ]]; then
-          rm -rf build/
+          if [[ -n '${{ inputs.working-directory }}' ]]; then
+            rm -rf '${{ inputs.working-directory }}/build'
+          else
+            rm -rf build
+          fi
         fi
 
         echo '::set-output name=TO_PRODUCTION::true'
