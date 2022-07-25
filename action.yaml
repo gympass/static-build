@@ -31,6 +31,12 @@ inputs:
   extra-envs:
     description: 'List of extra environment variables composed of one or more lines in the format KEY=VALUE'
     required: false
+  build-command:
+    description: 'Overrides the default "build" command passed to yarn'
+    required: false
+  deploy-source:
+    description: 'Source directory containing output files to be pushed to S3'
+    required: false
 outputs:
   deployed-to-production:
     description: "Whether the action deployed changes to production. Possible values are 'true' and 'false'"
@@ -47,6 +53,7 @@ runs:
         cmd=("${{ inputs.entrypoint }}" --env ${{ inputs.env }});
         if [ -n '${{ inputs.load-envs-from }}' ]; then cmd+=(--load-envs-from '${{ inputs.load-envs-from }}'); fi
         if [ -n '${{ inputs.working-directory }}' ]; then cmd+=(--working-directory '${{ inputs.working-directory }}'); fi
+        if [ -n '${{ inputs.build-command }}' ]; then cmd+=(--build-command '${{ inputs.build-command }}'); fi
         if [[ -n "${EXTRA_ENVS:+x}" ]]; then
           cat <<-EOF > /tmp/static-build-extra-envs
             ${EXTRA_ENVS}
@@ -71,13 +78,26 @@ runs:
         deploy=('/gympass/cloudfront-deploy'
                 '--environment' '${{ inputs.deploy-to }}'
                 '--bucket-name' "$BUCKET_NAME"
-                '--cloudfront-id' "$CLOUDFRONT_ID"
-                '--source' 'build/')
-        if [ -n '${{ inputs.working-directory }}' ]; then deploy+=(--working-directory ${{ inputs.working-directory }}); fi
+                '--cloudfront-id' "$CLOUDFRONT_ID")
+
+        if [ -n '${{ inputs.deploy-source }}' ]; then
+          sourceName="$(basename "${{ inputs.deploy-source }}")"
+          workingDir="$(dirname "${{ inputs.deploy-source }}")"
+
+          deploy+=('--working-directory' "${workingDir}"
+                   '--source' "${sourceName}");
+        else if [ -n '${{ inputs.working-directory }}' ]; then
+          deploy+=(--working-directory ${{ inputs.working-directory }});
+          deploy+=('--source' 'build/')
+        else
+          deploy+=('--source' 'build/')
+        fi
         "${deploy[@]}"
 
         if [[ '${{ inputs.preserve-build-directory }}' == 'false' ]]; then
-          if [[ -n '${{ inputs.working-directory }}' ]]; then
+          if [[ -n '${{ inputs.deploy-source }}' ]]; then
+            rm -rf '${{ inputs.deploy-source }}'
+          else if [[ -n '${{ inputs.working-directory }}' ]]; then
             rm -rf '${{ inputs.working-directory }}/build'
           else
             rm -rf build
