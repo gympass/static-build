@@ -28,6 +28,9 @@ inputs:
   working-directory:
     description: 'Alternative working directory to run this action from'
     required: false
+  extra-envs:
+    description: 'List of extra environment variables composed of one or more lines in the format KEY=VALUE'
+    required: false
 outputs:
   deployed-to-production:
     description: "Whether the action deployed changes to production. Possible values are 'true' and 'false'"
@@ -35,14 +38,22 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: "Build image"
-      id: build
+    - id: build
       shell: bash
+      env:
+        EXTRA_ENVS: ${{ inputs.extra-envs }}
       run: |
         set -eux
         cmd=("${{ inputs.entrypoint }}" --env ${{ inputs.env }});
         if [ -n '${{ inputs.load-envs-from }}' ]; then cmd+=(--load-envs-from '${{ inputs.load-envs-from }}'); fi
         if [ -n '${{ inputs.working-directory }}' ]; then cmd+=(--working-directory '${{ inputs.working-directory }}'); fi
+        if [[ -n "${EXTRA_ENVS:+x}" ]]; then
+          cat <<-EOF > /tmp/static-build-extra-envs
+            ${EXTRA_ENVS}
+        EOF
+          cmd+=(--extra-envs-from /tmp/static-build-extra-envs);
+        fi
+
         "${cmd[@]}";
 
         if [[ '${{ inputs.confirm }}' == 'true' ]]; then
